@@ -101,3 +101,28 @@ console.log(`middle-third avg RGB: ${regionAvg(0, height / 3 | 0, width, (2 * he
 console.log(`bottom-third avg RGB: ${regionAvg(0, (2 * height) / 3 | 0, width, height)}`);
 console.log(`center avg RGB:       ${regionAvg(width / 4 | 0, height / 3 | 0, (3 * width) / 4 | 0, (2 * height) / 3 | 0)}`);
 console.log(`unique colors(5bit): ${colors.size}, red-dominant px: ${((redish / total) * 100).toFixed(2)}%`);
+
+// Coarse 24x13 grid visualization: K=black, W=white/gray, S=sky-blue, G=green, R=red, Y=yellow/bright
+const COLS = 24, ROWS = 13;
+let out = '';
+for (let ry = 0; ry < ROWS; ry++) {
+  let line = '';
+  for (let cx = 0; cx < COLS; cx++) {
+    const [r, g, b] = regionAvg(
+      (cx * width) / COLS | 0, (ry * height) / ROWS | 0,
+      ((cx + 1) * width) / COLS | 0, ((ry + 1) * height) / ROWS | 0
+    );
+    const lum = (r + g + b) / 3;
+    let ch;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    if (lum < 30) ch = 'K';
+    else if (mx - mn < 25) ch = lum > 200 ? 'W' : '.';
+    else if (r > g && r > b) ch = 'R';
+    else if (g >= b && g > r * 1.12) ch = 'G';
+    else if (b > r && b >= g) ch = lum > 190 ? 'w' : 'S';
+    else ch = 'Y';
+    line += ch;
+  }
+  out += line + '\n';
+}
+console.log(out);

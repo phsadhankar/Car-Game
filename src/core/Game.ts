@@ -1,10 +1,22 @@
 import * as THREE from 'three';
 import { Input } from './Input';
-import { Vehicle, type GroundSample } from '../vehicle/Vehicle';
+import { Vehicle } from '../vehicle/Vehicle';
 import { CarModel } from '../vehicle/CarModel';
 import { SkyDome } from '../world/SkyDome';
+import { Terrain } from '../world/Terrain';
+import {
+  ROAD_HALF_WIDTH,
+  distanceToTrack,
+  trackPointAt,
+  trackTangentAt
+} from '../world/trackSpline';
 
-const SPAWN = new THREE.Vector3(0, 1.4, 0);
+const _spawnPos = new THREE.Vector3();
+const _spawnTan = new THREE.Vector3();
+trackPointAt(0.005, _spawnPos);
+trackTangentAt(0.005, _spawnTan);
+const SPAWN_YAW = Math.atan2(_spawnTan.x, _spawnTan.z);
+const SPAWN = new THREE.Vector3(_spawnPos.x, 1.2, _spawnPos.z);
 
 export class Game {
   readonly renderer: THREE.WebGLRenderer;
@@ -34,6 +46,8 @@ export class Game {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
     container.appendChild(this.renderer.domElement);
 
     this.camera = new THREE.PerspectiveCamera(
@@ -46,13 +60,12 @@ export class Game {
     this.scene.background = new THREE.Color(0x87b5e0);
     this.scene.fog = new THREE.Fog(0x87b5e0, 300, 1800);
 
-    const skyDome = new SkyDome(this.scene, this.renderer);
-    this.skyDome = skyDome;
-
     const hemi = new THREE.HemisphereLight(0xbfd8ff, 0x3a4a2a, 0.25);
     this.scene.add(hemi);
 
-    this.sun = new THREE.DirectionalLight(0xfff2d8, 2.2);
+    this.skyDome = new SkyDome(this.scene, this.renderer);
+
+    this.sun = new THREE.DirectionalLight(0xfff2d8, 2.4);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
     this.sun.shadow.camera.near = 10;
@@ -66,25 +79,18 @@ export class Game {
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
 
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(4000, 4000),
-      new THREE.MeshStandardMaterial({ color: 0x4a7c3a, roughness: 1 })
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    this.scene.add(ground);
-
-    const grid = new THREE.GridHelper(2000, 200, 0x33552a, 0x3f6633);
-    grid.position.y = 0.02;
-    this.scene.add(grid);
+    // World
+    const terrain = new Terrain();
+    this.scene.add(terrain.mesh);
 
     // Vehicle
-    const flatGround = (_x: number, _z: number, out: GroundSample) => {
-      out.height = 0;
-      out.normal.set(0, 1, 0);
-    };
-    this.vehicle = new Vehicle(flatGround);
-    this.vehicle.resetTo(SPAWN, 0);
+    this.vehicle = new Vehicle((_x, _z, out) => {
+      out.height = terrain.heightAt(_x, _z);
+    });
+    this.vehicle.setSurfaceSampler((x, z) =>
+      distanceToTrack(x, z) < ROAD_HALF_WIDTH + 1.2 ? 1 : 0.58
+    );
+    this.vehicle.resetTo(SPAWN, SPAWN_YAW);
     this.carModel = new CarModel();
     this.scene.add(this.carModel.root);
 
@@ -108,7 +114,7 @@ export class Game {
 
   protected update(dt: number): void {
     if (this.input.pressed('KeyR')) {
-      this.vehicle.resetTo(SPAWN, 0);
+      this.vehicle.resetTo(SPAWN, SPAWN_YAW);
       this.snapCamera();
     }
 
