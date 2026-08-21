@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Input } from './Input';
+import { AudioEngine } from './Audio';
 import { Vehicle } from '../vehicle/Vehicle';
 import { CarModel } from '../vehicle/CarModel';
 import { SkyDome } from '../world/SkyDome';
@@ -36,6 +37,8 @@ export class Game {
   private sun: THREE.DirectionalLight;
   private colliders!: ColliderSet;
   private postFX: PostFX;
+  private audio = new AudioEngine();
+  private audioStarted = false;
 
   private camPos = new THREE.Vector3();
   private camLook = new THREE.Vector3();
@@ -134,6 +137,12 @@ export class Game {
   }
 
   protected update(dt: number): void {
+    if (!this.audioStarted) {
+      this.audioStarted = true;
+      this.audio.ensureStarted();
+    }
+    if (this.input.pressed('KeyM')) this.audio.toggleMute();
+
     if (this.input.pressed('KeyR')) {
       this.vehicle.resetTo(SPAWN, SPAWN_YAW);
       this.snapCamera();
@@ -153,9 +162,26 @@ export class Game {
     }
 
     this.vehicle.update(dt, this.input);
-    this.colliders.resolve(this.vehicle.position, this.vehicle.velocity, 1.15);
+    const hit = this.colliders.resolve(this.vehicle.position, this.vehicle.velocity, 1.15);
+    if (hit && this.vehicle.speedKmh > 12) {
+      this.audio.thump(Math.min(this.vehicle.speedKmh / 80, 1));
+    }
     this.carModel.sync(this.vehicle);
     this.carModel.setBrakeLights(this.input.brakeInput > 0 || this.input.handbrake);
+
+    let maxSlip = 0;
+    for (let i = 0; i < this.vehicle.wheelCount; i++) {
+      if (this.vehicle.wheelContact(i)) {
+        maxSlip = Math.max(maxSlip, this.vehicle.wheelSlip(i));
+      }
+    }
+    this.audio.update(
+      this.vehicle.rpm,
+      this.input.throttle,
+      maxSlip,
+      this.vehicle.speedKmh,
+      dt
+    );
     this.updateCamera(dt);
     this.updateSun();
   }
