@@ -62,8 +62,14 @@ export class Hud {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
+  private trialMode = false;
+
+  setTrialMode(on: boolean): void {
+    this.trialMode = on;
+  }
+
   update(dt: number, speedKmh: number, gearLabel: string, rpm: number, pos: THREE.Vector3): void {
-    this.updateLap(pos);
+    if (this.trialMode) this.updateLap(pos);
     this.lapTime += dt;
 
     const ctx = this.ctx;
@@ -73,7 +79,7 @@ export class Hud {
 
     this.drawSpeedo(w, h, speedKmh, gearLabel, rpm);
     this.drawMinimap(w, h, pos);
-    this.drawTimer(w);
+    if (this.trialMode) this.drawTimer(w);
   }
 
   private updateLap(pos: THREE.Vector3): void {

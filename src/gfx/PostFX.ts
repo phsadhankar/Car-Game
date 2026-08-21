@@ -4,7 +4,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 
-/** HDR pipeline: render -> selective bloom -> ACES output. */
+/** HDR pipeline: render -> ACES output -> optional bloom. */
 export class PostFX {
   readonly composer: EffectComposer;
   private bloom: UnrealBloomPass;

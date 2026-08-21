@@ -10,6 +10,7 @@ import { Props } from '../world/Props';
 import { ColliderSet } from '../world/Colliders';
 import { PostFX } from '../gfx/PostFX';
 import { Hud } from '../ui/Hud';
+import { Menu } from '../ui/Menu';
 import {
   ROAD_HALF_WIDTH,
   distanceToTrack,
@@ -39,6 +40,9 @@ export class Game {
   private colliders!: ColliderSet;
   private postFX: PostFX;
   private hud: Hud;
+  private menu: Menu;
+  private started = false;
+  private paused = false;
   private audio = new AudioEngine();
   private audioStarted = false;
 
@@ -123,6 +127,41 @@ export class Game {
     // HUD overlay
     this.hud = new Hud();
     this.hud.resize(container.clientWidth, container.clientHeight);
+    this.hud.setTrialMode(false);
+
+    // Menu overlay
+    this.menu = new Menu({
+      onStart: (mode) => {
+        this.audioStarted = true;
+        this.audio.ensureStarted();
+        this.hud.setTrialMode(mode === 'trial');
+        this.menu.hide();
+        if (!this.started) {
+          this.started = true;
+          this.snapCamera();
+        }
+        this.paused = false;
+        this.start();
+      },
+      onResume: () => {
+        this.menu.hide();
+        this.paused = false;
+      },
+      onSetBloom: (on) => this.postFX.setQuality(on),
+      onToggleMute: () => this.audio.toggleMute(),
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Escape' && this.started) {
+        if (this.paused) {
+          this.paused = false;
+          this.menu.hide();
+        } else {
+          this.paused = true;
+          this.menu.showPause();
+        }
+      }
+    });
 
     // Camera init behind car
     this.snapCamera();
@@ -237,8 +276,10 @@ export class Game {
 
   private tick = (): void => {
     const dt = Math.min(this.clock.getDelta(), 1 / 20);
-    this.update(dt);
-    this.input.endFrame();
+    if (this.started && !this.paused) {
+      this.update(dt);
+      this.input.endFrame();
+    }
     this.postFX.render(dt);
   };
 
