@@ -109,6 +109,29 @@ export function nearestTrackPoint(x: number, z: number, out: THREE.Vector3): num
   return best;
 }
 
+/** Fraction u in [0,1) along the loop nearest to (x,z). */
+export function nearestTrackU(x: number, z: number): number {
+  const cx = Math.floor(x / CELL),
+    cz = Math.floor(z / CELL);
+  let best = Infinity;
+  let bestI = 0;
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      const arr = grid.get(cellKey(cx + dx, cz + dz));
+      if (!arr) continue;
+      for (const i of arr) {
+        const s = samples[i];
+        const d = (s.x - x) * (s.x - x) + (s.z - z) * (s.z - z);
+        if (d < best) {
+          best = d;
+          bestI = i;
+        }
+      }
+    }
+  }
+  return bestI / samples.length;
+}
+
 /** World position at fraction t along the loop. */
 export function trackPointAt(t: number, out: THREE.Vector3): THREE.Vector3 {
   return trackCurve.getPointAt(t % 1, out);

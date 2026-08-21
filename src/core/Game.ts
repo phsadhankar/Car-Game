@@ -9,6 +9,7 @@ import { Track } from '../world/Track';
 import { Props } from '../world/Props';
 import { ColliderSet } from '../world/Colliders';
 import { PostFX } from '../gfx/PostFX';
+import { Hud } from '../ui/Hud';
 import {
   ROAD_HALF_WIDTH,
   distanceToTrack,
@@ -37,6 +38,7 @@ export class Game {
   private sun: THREE.DirectionalLight;
   private colliders!: ColliderSet;
   private postFX: PostFX;
+  private hud: Hud;
   private audio = new AudioEngine();
   private audioStarted = false;
 
@@ -118,6 +120,10 @@ export class Game {
       container.clientHeight
     );
 
+    // HUD overlay
+    this.hud = new Hud();
+    this.hud.resize(container.clientWidth, container.clientHeight);
+
     // Camera init behind car
     this.snapCamera();
 
@@ -182,8 +188,17 @@ export class Game {
       this.vehicle.speedKmh,
       dt
     );
+
     this.updateCamera(dt);
     this.updateSun();
+
+    this.hud.update(
+      dt,
+      this.vehicle.speedKmh,
+      this.vehicle.gearLabel,
+      this.vehicle.rpm,
+      this.vehicle.position
+    );
   }
 
   private updateCamera(dt: number): void {
@@ -234,5 +249,6 @@ export class Game {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
     this.postFX.setSize(w, h);
+    this.hud.resize(w, h);
   };
 }
