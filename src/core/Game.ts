@@ -9,6 +9,8 @@ import { Track } from '../world/Track';
 import { Props } from '../world/Props';
 import { ColliderSet } from '../world/Colliders';
 import { PostFX } from '../gfx/PostFX';
+import { SkidMarks } from '../gfx/SkidMarks';
+import { Smoke } from '../gfx/Smoke';
 import { Hud } from '../ui/Hud';
 import { Menu } from '../ui/Menu';
 import {
@@ -24,6 +26,7 @@ trackPointAt(0.005, _spawnPos);
 trackTangentAt(0.005, _spawnTan);
 const SPAWN_YAW = Math.atan2(_spawnTan.x, _spawnTan.z);
 const SPAWN = new THREE.Vector3(_spawnPos.x, 1.2, _spawnPos.z);
+const _wp = new THREE.Vector3();
 
 export class Game {
   readonly renderer: THREE.WebGLRenderer;
@@ -41,6 +44,12 @@ export class Game {
   private postFX: PostFX;
   private hud: Hud;
   private menu: Menu;
+  private skidMarks!: SkidMarks;
+  private smoke!: Smoke;
+  private lastSkid = [new THREE.Vector3(), new THREE.Vector3()];
+  private skidding = [false, false];
+  private smokeTimer = 0;
+  private cameraMode = 0;
   private started = false;
   private paused = false;
   private audio = new AudioEngine();
@@ -124,6 +133,10 @@ export class Game {
       container.clientHeight
     );
 
+    // Effects
+    this.skidMarks = new SkidMarks(this.scene);
+    this.smoke = new Smoke(this.scene);
+
     // HUD overlay
     this.hud = new Hud();
     this.hud.resize(container.clientWidth, container.clientHeight);
@@ -167,6 +180,13 @@ export class Game {
     this.snapCamera();
 
     window.addEventListener('resize', this.onResize);
+
+    // Headless/test hook: skip menu
+    if (new URLSearchParams(location.search).has('auto')) {
+      this.started = true;
+      this.menu.hide();
+      this.start();
+    }
   }
 
   start(): void {
@@ -230,6 +250,7 @@ export class Game {
 
     this.updateCamera(dt);
     this.updateSun();
+    this.updateEffects(dt);
 
     this.hud.update(
       dt,
@@ -240,25 +261,91 @@ export class Game {
     );
   }
 
+  private updateEffects(dt: number): void {
+    const v = this.vehicle;
+    const kmh = v.speedKmh;
+    this.smokeTimer -= dt;
+
+    for (let w = 0; w < 2; w++) {
+      const i = w + 2; // rear wheels
+      const slip = v.wheelSlip(i);
+      const contact = v.wheelContact(i);
+      const skid = contact && slip > 0.35 && kmh > 8;
+      const p = v.wheelWorldPosition(i, _wp);
+
+      if (skid) {
+        if (this.skidding[w]) {
+          this.skidMarks.addSegment(
+            this.lastSkid[w].x,
+            this.lastSkid[w].z,
+            p.x,
+            p.z,
+            0.32,
+            p.y + 0.02,
+            Math.min(0.55, slip * 0.5)
+          );
+        }
+        this.lastSkid[w].copy(p);
+        this.skidding[w] = true;
+
+        if (this.smokeTimer <= 0) {
+          this.smoke.spawn(p.x, p.y + 0.15, p.z, Math.min(slip, 1.4));
+        }
+      } else {
+        this.skidding[w] = false;
+      }
+    }
+    if (this.smokeTimer <= 0) this.smokeTimer = 0.045;
+    this.smoke.update(dt);
+  }
+
   private updateCamera(dt: number): void {
     const v = this.vehicle;
-    const back = new THREE.Vector3(0, 2.7, -7.2).applyQuaternion(v.quaternion).add(v.position);
-    const k = 1 - Math.exp(-5.5 * dt);
-    this.camPos.lerp(back, k);
 
-    const ahead = new THREE.Vector3(0, 1.1, 4).applyQuaternion(v.quaternion).add(v.position);
-    if (this.lookYawOffset !== 0 || this.lookPitchOffset !== 0) {
-      const yawQ = new THREE.Quaternion().setFromAxisAngle(
-        new THREE.Vector3(0, 1, 0),
-        this.lookYawOffset
-      );
-      ahead.sub(v.position).applyQuaternion(yawQ).add(v.position);
-      ahead.y += this.lookPitchOffset * 6;
+    if (this.input.pressed('KeyC')) {
+      this.cameraMode = (this.cameraMode + 1) % 3;
     }
-    this.camLook.lerp(ahead, 1 - Math.exp(-9 * dt));
+
+    let back: THREE.Vector3;
+    let ahead: THREE.Vector3;
+    let lerpK = 5.5;
+    if (this.cameraMode === 1) {
+      // Hood cam
+      back = new THREE.Vector3(0, 1.06, 0.4).applyQuaternion(v.quaternion).add(v.position);
+      ahead = new THREE.Vector3(0, 1.0, 10).applyQuaternion(v.quaternion).add(v.position);
+      lerpK = 22;
+    } else if (this.cameraMode === 2) {
+      // Cinematic orbit
+      const t = performance.now() / 1000 * 0.25;
+      back = new THREE.Vector3(Math.cos(t) * 9, 2.2 + Math.sin(t * 0.7), Math.sin(t) * 9).add(v.position);
+      ahead = v.position.clone().add(new THREE.Vector3(0, 0.8, 0));
+      lerpK = 3;
+    } else {
+      // Chase cam
+      back = new THREE.Vector3(0, 2.7, -7.2).applyQuaternion(v.quaternion).add(v.position);
+      ahead = new THREE.Vector3(0, 1.1, 4).applyQuaternion(v.quaternion).add(v.position);
+      if (this.lookYawOffset !== 0 || this.lookPitchOffset !== 0) {
+        const yawQ = new THREE.Quaternion().setFromAxisAngle(
+          new THREE.Vector3(0, 1, 0),
+          this.lookYawOffset
+        );
+        ahead.sub(v.position).applyQuaternion(yawQ).add(v.position);
+        ahead.y += this.lookPitchOffset * 6;
+      }
+    }
+
+    const k = 1 - Math.exp(-lerpK * dt);
+    this.camPos.lerp(back, k);
+    this.camLook.lerp(ahead, 1 - Math.exp(-Math.max(lerpK * 1.6, 9) * dt));
 
     this.camera.position.copy(this.camPos);
     this.camera.lookAt(this.camLook);
+
+    // Speed FOV kick
+    const targetFov =
+      62 + THREE.MathUtils.clamp((v.speedKmh - 90) / 150, 0, 1) * 14;
+    this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dt * 3);
+    this.camera.updateProjectionMatrix();
   }
 
   private snapCamera(): void {
