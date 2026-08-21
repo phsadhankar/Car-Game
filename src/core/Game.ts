@@ -1,5 +1,9 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { Input } from './Input';
+import { Vehicle, type GroundSample } from '../vehicle/Vehicle';
+import { CarVisual } from '../vehicle/CarVisual';
+
+const SPAWN = new THREE.Vector3(0, 1.4, 0);
 
 export class Game {
   readonly renderer: THREE.WebGLRenderer;
@@ -8,7 +12,16 @@ export class Game {
   readonly clock = new THREE.Clock();
 
   private container: HTMLElement;
-  private controls: OrbitControls;
+  private input = new Input();
+  private vehicle: Vehicle;
+  private carVisual: CarVisual;
+  private sun: THREE.DirectionalLight;
+
+  private camPos = new THREE.Vector3();
+  private camLook = new THREE.Vector3();
+  private lookYawOffset = 0;
+  private lookPitchOffset = 0;
+
   private running = false;
 
   constructor(container: HTMLElement) {
@@ -22,16 +35,11 @@ export class Game {
     container.appendChild(this.renderer.domElement);
 
     this.camera = new THREE.PerspectiveCamera(
-      60,
+      62,
       container.clientWidth / container.clientHeight,
       0.1,
       4000
     );
-    this.camera.position.set(12, 9, 16);
-
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true;
-    this.controls.maxPolarAngle = Math.PI / 2 - 0.02;
 
     this.scene.background = new THREE.Color(0x87b5e0);
     this.scene.fog = new THREE.Fog(0x87b5e0, 300, 1800);
@@ -39,19 +47,19 @@ export class Game {
     const hemi = new THREE.HemisphereLight(0xbfd8ff, 0x3a4a2a, 0.7);
     this.scene.add(hemi);
 
-    const sun = new THREE.DirectionalLight(0xfff2d8, 2.2);
-    sun.position.set(120, 160, 60);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.near = 10;
-    sun.shadow.camera.far = 600;
-    const s = 140;
-    sun.shadow.camera.left = -s;
-    sun.shadow.camera.right = s;
-    sun.shadow.camera.top = s;
-    sun.shadow.camera.bottom = -s;
-    sun.shadow.bias = -0.0004;
-    this.scene.add(sun);
+    this.sun = new THREE.DirectionalLight(0xfff2d8, 2.2);
+    this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.camera.near = 10;
+    this.sun.shadow.camera.far = 600;
+    const s = 90;
+    this.sun.shadow.camera.left = -s;
+    this.sun.shadow.camera.right = s;
+    this.sun.shadow.camera.top = s;
+    this.sun.shadow.camera.bottom = -s;
+    this.sun.shadow.bias = -0.0004;
+    this.scene.add(this.sun);
+    this.scene.add(this.sun.target);
 
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(4000, 4000),
@@ -64,6 +72,19 @@ export class Game {
     const grid = new THREE.GridHelper(2000, 200, 0x33552a, 0x3f6633);
     grid.position.y = 0.02;
     this.scene.add(grid);
+
+    // Vehicle
+    const flatGround = (_x: number, _z: number, out: GroundSample) => {
+      out.height = 0;
+      out.normal.set(0, 1, 0);
+    };
+    this.vehicle = new Vehicle(flatGround);
+    this.vehicle.resetTo(SPAWN, 0);
+    this.carVisual = new CarVisual();
+    this.scene.add(this.carVisual.root);
+
+    // Camera init behind car
+    this.snapCamera();
 
     window.addEventListener('resize', this.onResize);
   }
@@ -80,12 +101,69 @@ export class Game {
     this.renderer.setAnimationLoop(null);
   }
 
-  protected update(_dt: number): void {}
+  protected update(dt: number): void {
+    if (this.input.pressed('KeyR')) {
+      this.vehicle.resetTo(SPAWN, 0);
+      this.snapCamera();
+    }
+
+    // Mouse look while RMB held
+    if (this.input.lookHeld) {
+      this.lookYawOffset -= this.input.mouseDX * 0.005;
+      this.lookPitchOffset = THREE.MathUtils.clamp(
+        this.lookPitchOffset - this.input.mouseDY * 0.004,
+        -0.5,
+        0.6
+      );
+    } else {
+      this.lookYawOffset *= Math.max(0, 1 - dt * 6);
+      this.lookPitchOffset *= Math.max(0, 1 - dt * 6);
+    }
+
+    this.vehicle.update(dt, this.input);
+    this.carVisual.sync(this.vehicle);
+    this.updateCamera(dt);
+    this.updateSun();
+  }
+
+  private updateCamera(dt: number): void {
+    const v = this.vehicle;
+    const back = new THREE.Vector3(0, 2.7, -7.2).applyQuaternion(v.quaternion).add(v.position);
+    const k = 1 - Math.exp(-5.5 * dt);
+    this.camPos.lerp(back, k);
+
+    const ahead = new THREE.Vector3(0, 1.1, 4).applyQuaternion(v.quaternion).add(v.position);
+    if (this.lookYawOffset !== 0 || this.lookPitchOffset !== 0) {
+      const yawQ = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(0, 1, 0),
+        this.lookYawOffset
+      );
+      ahead.sub(v.position).applyQuaternion(yawQ).add(v.position);
+      ahead.y += this.lookPitchOffset * 6;
+    }
+    this.camLook.lerp(ahead, 1 - Math.exp(-9 * dt));
+
+    this.camera.position.copy(this.camPos);
+    this.camera.lookAt(this.camLook);
+  }
+
+  private snapCamera(): void {
+    this.camPos.copy(new THREE.Vector3(0, 2.7, -7.2).applyQuaternion(this.vehicle.quaternion).add(this.vehicle.position));
+    this.camLook.copy(new THREE.Vector3(0, 1.1, 4).applyQuaternion(this.vehicle.quaternion).add(this.vehicle.position));
+    this.camera.position.copy(this.camPos);
+    this.camera.lookAt(this.camLook);
+  }
+
+  private updateSun(): void {
+    const p = this.vehicle.position;
+    this.sun.position.set(p.x + 60, p.y + 90, p.z + 30);
+    this.sun.target.position.copy(p);
+  }
 
   private tick = (): void => {
     const dt = Math.min(this.clock.getDelta(), 1 / 20);
-    this.controls.update();
     this.update(dt);
+    this.input.endFrame();
     this.renderer.render(this.scene, this.camera);
   };
 
