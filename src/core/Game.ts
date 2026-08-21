@@ -5,6 +5,8 @@ import { CarModel } from '../vehicle/CarModel';
 import { SkyDome } from '../world/SkyDome';
 import { Terrain } from '../world/Terrain';
 import { Track } from '../world/Track';
+import { Props } from '../world/Props';
+import { ColliderSet } from '../world/Colliders';
 import {
   ROAD_HALF_WIDTH,
   distanceToTrack,
@@ -31,6 +33,7 @@ export class Game {
   private carModel: CarModel;
   private skyDome: SkyDome;
   private sun: THREE.DirectionalLight;
+  private colliders!: ColliderSet;
 
   private camPos = new THREE.Vector3();
   private camLook = new THREE.Vector3();
@@ -96,6 +99,11 @@ export class Game {
     this.carModel = new CarModel();
     this.scene.add(this.carModel.root);
 
+    // Props + static collision
+    const props = new Props();
+    this.scene.add(props.group);
+    this.colliders = props.colliders;
+
     // Camera init behind car
     this.snapCamera();
 
@@ -134,6 +142,7 @@ export class Game {
     }
 
     this.vehicle.update(dt, this.input);
+    this.colliders.resolve(this.vehicle.position, this.vehicle.velocity, 1.15);
     this.carModel.sync(this.vehicle);
     this.carModel.setBrakeLights(this.input.brakeInput > 0 || this.input.handbrake);
     this.updateCamera(dt);
