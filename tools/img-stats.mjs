@@ -96,6 +96,7 @@ for (let y = 0; y < height; y += 3)
   }
 
 console.log(`size=${width}x${height}`);
+console.log(`corners RGB: TL=${regionAvg(0, 0, width / 4 | 0, height / 4 | 0)} TR=${regionAvg((3 * width) / 4 | 0, 0, width, height / 4 | 0)} BL=${regionAvg(0, (3 * height) / 4 | 0, width / 4 | 0, height)} BR=${regionAvg((3 * width) / 4 | 0, (3 * height) / 4 | 0, width, height)}`);
 console.log(`top-third avg RGB:    ${regionAvg(0, 0, width, height / 3 | 0)}`);
 console.log(`middle-third avg RGB: ${regionAvg(0, height / 3 | 0, width, (2 * height) / 3 | 0)}`);
 console.log(`bottom-third avg RGB: ${regionAvg(0, (2 * height) / 3 | 0, width, height)}`);
@@ -116,10 +117,10 @@ for (let ry = 0; ry < ROWS; ry++) {
     let ch;
     const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
     if (lum < 30) ch = 'K';
-    else if (mx - mn < 25) ch = lum > 200 ? 'W' : '.';
+    else if (mx - mn < 10) ch = lum > 200 ? 'W' : '.';
     else if (r > g && r > b) ch = 'R';
     else if (g >= b && g > r * 1.12) ch = 'G';
-    else if (b > r && b >= g) ch = lum > 190 ? 'w' : 'S';
+    else if (b > r && b >= g) ch = lum > 200 ? 'w' : 'S';
     else ch = 'Y';
     line += ch;
   }

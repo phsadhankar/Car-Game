@@ -7,6 +7,7 @@ import { Terrain } from '../world/Terrain';
 import { Track } from '../world/Track';
 import { Props } from '../world/Props';
 import { ColliderSet } from '../world/Colliders';
+import { PostFX } from '../gfx/PostFX';
 import {
   ROAD_HALF_WIDTH,
   distanceToTrack,
@@ -34,6 +35,7 @@ export class Game {
   private skyDome: SkyDome;
   private sun: THREE.DirectionalLight;
   private colliders!: ColliderSet;
+  private postFX: PostFX;
 
   private camPos = new THREE.Vector3();
   private camLook = new THREE.Vector3();
@@ -51,7 +53,7 @@ export class Game {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 0.92;
     container.appendChild(this.renderer.domElement);
 
     this.camera = new THREE.PerspectiveCamera(
@@ -103,6 +105,15 @@ export class Game {
     const props = new Props();
     this.scene.add(props.group);
     this.colliders = props.colliders;
+
+    // Post-processing
+    this.postFX = new PostFX(
+      this.renderer,
+      this.scene,
+      this.camera,
+      container.clientWidth,
+      container.clientHeight
+    );
 
     // Camera init behind car
     this.snapCamera();
@@ -187,7 +198,7 @@ export class Game {
     const dt = Math.min(this.clock.getDelta(), 1 / 20);
     this.update(dt);
     this.input.endFrame();
-    this.renderer.render(this.scene, this.camera);
+    this.postFX.render(dt);
   };
 
   private onResize = (): void => {
@@ -196,5 +207,6 @@ export class Game {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
+    this.postFX.setSize(w, h);
   };
 }
