@@ -4,6 +4,7 @@ import { Vehicle } from '../vehicle/Vehicle';
 import { CarModel } from '../vehicle/CarModel';
 import { SkyDome } from '../world/SkyDome';
 import { Terrain } from '../world/Terrain';
+import { Track } from '../world/Track';
 import {
   ROAD_HALF_WIDTH,
   distanceToTrack,
@@ -82,6 +83,7 @@ export class Game {
     // World
     const terrain = new Terrain();
     this.scene.add(terrain.mesh);
+    this.scene.add(new Track().group);
 
     // Vehicle
     this.vehicle = new Vehicle((_x, _z, out) => {
