@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { Input } from './Input';
 import { Vehicle, type GroundSample } from '../vehicle/Vehicle';
-import { CarVisual } from '../vehicle/CarVisual';
+import { CarModel } from '../vehicle/CarModel';
+import { SkyDome } from '../world/SkyDome';
 
 const SPAWN = new THREE.Vector3(0, 1.4, 0);
 
@@ -14,7 +15,8 @@ export class Game {
   private container: HTMLElement;
   private input = new Input();
   private vehicle: Vehicle;
-  private carVisual: CarVisual;
+  private carModel: CarModel;
+  private skyDome: SkyDome;
   private sun: THREE.DirectionalLight;
 
   private camPos = new THREE.Vector3();
@@ -44,7 +46,10 @@ export class Game {
     this.scene.background = new THREE.Color(0x87b5e0);
     this.scene.fog = new THREE.Fog(0x87b5e0, 300, 1800);
 
-    const hemi = new THREE.HemisphereLight(0xbfd8ff, 0x3a4a2a, 0.7);
+    const skyDome = new SkyDome(this.scene, this.renderer);
+    this.skyDome = skyDome;
+
+    const hemi = new THREE.HemisphereLight(0xbfd8ff, 0x3a4a2a, 0.25);
     this.scene.add(hemi);
 
     this.sun = new THREE.DirectionalLight(0xfff2d8, 2.2);
@@ -80,8 +85,8 @@ export class Game {
     };
     this.vehicle = new Vehicle(flatGround);
     this.vehicle.resetTo(SPAWN, 0);
-    this.carVisual = new CarVisual();
-    this.scene.add(this.carVisual.root);
+    this.carModel = new CarModel();
+    this.scene.add(this.carModel.root);
 
     // Camera init behind car
     this.snapCamera();
@@ -121,7 +126,8 @@ export class Game {
     }
 
     this.vehicle.update(dt, this.input);
-    this.carVisual.sync(this.vehicle);
+    this.carModel.sync(this.vehicle);
+    this.carModel.setBrakeLights(this.input.brakeInput > 0 || this.input.handbrake);
     this.updateCamera(dt);
     this.updateSun();
   }
@@ -156,7 +162,7 @@ export class Game {
 
   private updateSun(): void {
     const p = this.vehicle.position;
-    this.sun.position.set(p.x + 60, p.y + 90, p.z + 30);
+    this.sun.position.copy(p).addScaledVector(this.skyDome.sunDirection, 140);
     this.sun.target.position.copy(p);
   }
 
